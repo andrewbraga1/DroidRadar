@@ -13,19 +13,20 @@ import android.util.Log
 import com.google.android.gms.location.*
 
 import com.google.android.gms.maps.*
-import com.google.android.gms.maps.model.MarkerOptions
 
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
-import com.google.android.gms.maps.model.LatLng
 
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.location.LocationRequest
 import android.widget.Toast
 import com.google.android.gms.location.LocationServices.getFusedLocationProviderClient
+import com.google.android.gms.maps.model.*
+
+import com.google.android.gms.maps.model.CameraPosition
+
+
 
 
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
@@ -34,7 +35,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     private var locationRequest: LocationRequest? = null
     private lateinit var mMap: GoogleMap
     //private lateinit var local: Location
-
+    lateinit var pre : Marker
     var fusedLocationClient: FusedLocationProviderClient? = null
 
 
@@ -48,36 +49,12 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         mapFragment.getMapAsync(this)
         locationRequest = LocationRequest.create();
         locationRequest?.priority=(LocationRequest.PRIORITY_HIGH_ACCURACY)
-        locationRequest?.interval=(1 * 1000)
+        locationRequest?.interval=(30*1000)
         //locationManager = getSystemService(LOCATION_SERVICE) as LocationManager?
         fusedLocationClient = getFusedLocationProviderClient(this)
 
         if (checkPermission(Manifest.permission.ACCESS_COARSE_LOCATION,
                 Manifest.permission.ACCESS_FINE_LOCATION)) {
-
-            val locationCallback = object : LocationCallback() {
-                override fun onLocationResult(lr: LocationResult) {
-                    if (lr == null) {
-                        return;
-                    }
-
-                    for (location:Location in lr.locations) {
-                        if (location != null) {
-                            val wayLatitude = location.latitude
-                            val wayLongitude = location.longitude
-                            val stringLocation = location.toString()
-
-                            Toast.makeText(this@MapsActivity, stringLocation, Toast.LENGTH_SHORT).show();
-                        }
-                    }
-//                    Log.e("LOG", lr.toString())
-//                    Log.e("AQUI", "Newest Location: " + lr.locations.last())
-                    // do something with the new location...
-                }
-            }
-            if (fusedLocationClient != null) {
-                fusedLocationClient?.removeLocationUpdates(locationCallback)
-            }
             fusedLocationClient?.lastLocation?.
                 addOnSuccessListener(this
                 ) { location : Location? ->
@@ -92,13 +69,64 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                         dialog.show()
                     }
                     if (location != null) {
-                        val wayLatitude = location.latitude
-                        val wayLongitude = location.longitude
+                        val pos_latitude = location.latitude
+                        val pos_longitude = location.longitude
+                        pre = mMap.addMarker(markerOptions
+                            .position(LatLng(pos_latitude,pos_longitude))
+                            .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)))
 
                     }
 
+
                 }
+
+
+            val locationCallback = object : LocationCallback() {
+
+                override fun onLocationResult(lr: LocationResult) {
+                    if (lr == null) {
+                        return;
+                    }
+
+                    for (location:Location in lr.locations) {
+
+                        if (location != null) {
+
+                            val pos_latitude = lr.locations.last().latitude
+                            val pos_longitude = lr.locations.last().longitude
+                            val stringLocation = location.toString()
+                            pre.remove()
+                            pre = mMap.addMarker(markerOptions
+                                    .position(LatLng(pos_latitude,pos_longitude))
+                                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
+                            )
+
+                            val oldPos = mMap.cameraPosition
+                            val pos = CameraPosition.builder(oldPos)
+                                .target(LatLng(pos_latitude,pos_longitude))
+                                .zoom(17f)
+                                .build()
+                            mMap.animateCamera(CameraUpdateFactory.newCameraPosition(pos))
+
+                            Log.e("atualizando", "Newest Location: ")
+
+
+
+                            //val a=(LatLng(pos_latitude,pos_longitude))
+                            //Toast.makeText(this@MapsActivity, stringLocation, Toast.LENGTH_SHORT).show();
+                        }
+                    }
+//                    Log.e("LOG", lr.toString())
+//                    Log.e("AQUI", "Newest Location: " + lr.locations.last())
+                    // do something with the new location...
+                }
+            }
+            if (fusedLocationClient != null) {
+                fusedLocationClient?.removeLocationUpdates(locationCallback)
+            }
+
             fusedLocationClient?.requestLocationUpdates(locationRequest,locationCallback,null)
+
         }
     }
 
