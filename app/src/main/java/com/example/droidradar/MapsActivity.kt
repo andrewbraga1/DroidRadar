@@ -32,6 +32,7 @@ import com.google.android.gms.location.LocationServices.getFusedLocationProvider
 import com.google.android.gms.maps.model.*
 
 import com.google.android.gms.maps.model.CameraPosition
+import io.realm.Realm
 import kotlinx.android.synthetic.main.activity_maps.*
 
 
@@ -48,11 +49,16 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, SeekBar.OnSeekBarC
     lateinit var circleLatLng: LatLng
     var fusedLocationClient: FusedLocationProviderClient? = null
     private lateinit var distance : String
+    var distanceMeasured = FloatArray(2)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_maps)
+        //Instanciando realm
 
+        Realm.init(this)
+
+        RadarDatabase.main(this)
 
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         val mapFragment = supportFragmentManager
@@ -77,93 +83,27 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, SeekBar.OnSeekBarC
 
 
 
-        if (checkPermission(Manifest.permission.ACCESS_COARSE_LOCATION,
-                Manifest.permission.ACCESS_FINE_LOCATION)) {
-            fusedLocationClient?.lastLocation?.
-                addOnSuccessListener(this
-                ) { location : Location? ->
-                    // Got last known location. In some rare
-                    // situations this can be null.
-                    if(location == null) {
-                        val dialog = AlertDialog.Builder(this)
-                            .setTitle("Aviso")
-                            .setMessage("Algo inesperado ocorreu. Tente novamente mais tarde!")
-                            .setPositiveButton("OK", {id, v ->})
-                            .create()
-                        dialog.show()
-                    }
-                    if (location != null) {
-                        val posLatitude = location.latitude
-                        val posLongitude = location.longitude
-                        pre = mMap.addMarker(markerOptions
-                            .position(LatLng(posLatitude,posLongitude))
-                            .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)))
-                        circle = mMap.addCircle(CircleOptions()
-                             .center(LatLng(posLatitude,posLongitude))
-                             .radius(seekBar.progress.toDouble()*1000)
-                             .strokeColor(Color.BLUE)
-                        )
-                    }
 
-
+    }
+    fun plotPoint(){
+        mMap.clear()
+        var c = 0
+        var points = RadarDatabase.getAllRadars()
+        if (points != null) {
+            for(point in points){
+                Location.distanceBetween(point.latitude!!, point.longitude!!, circle.center.latitude,circle.center.longitude,distanceMeasured)
+                if ( distanceMeasured[c] <= circle.radius)
+                {
+                    mMap.addMarker(markerOptions
+                        .position(LatLng(point.latitude!!,point.longitude!!))
+                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+                        .title(point.type)
+                    )
                 }
-
-
-            val locationCallback = object : LocationCallback() {
-
-                override fun onLocationResult(lr: LocationResult) {
-                    if (lr == null) {
-                        return;
-                    }
-
-                    for (location:Location in lr.locations) {
-
-                        if (location != null) {
-
-                            val posLatitude = lr.locations.last().latitude
-                            val posLongitude = lr.locations.last().longitude
-                            val stringLocation = location.toString()
-                            circleLatLng = LatLng(posLatitude,posLongitude)
-                            pre.remove()
-                            circle.remove()
-                            pre = mMap.addMarker(markerOptions
-                                    .position(LatLng(posLatitude,posLongitude))
-                                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
-                            )
-                            circle = mMap.addCircle(CircleOptions()
-                                .center(LatLng(posLatitude,posLongitude))
-                                .radius(seekBar.progress.toDouble()*1000)
-                                .strokeColor(Color.BLUE)
-                            )
-                            val oldPos = mMap.cameraPosition
-                            val pos = CameraPosition.builder(oldPos)
-                                .target(LatLng(posLatitude,posLongitude))
-                                .zoom(13f)
-                                .build()
-                            mMap.animateCamera(CameraUpdateFactory.newCameraPosition(pos))
-
-                            Log.e("atualizando", "Newest Location: "+String.format(stringLocation))
-
-
-
-                            //val a=(LatLng(pos_latitude,pos_longitude))
-                            //Toast.makeText(this@MapsActivity, stringLocation, Toast.LENGTH_SHORT).show();
-                        }
-                    }
-//                    Log.e("LOG", lr.toString())
-//                    Log.e("AQUI", "Newest Location: " + lr.locations.last())
-                    // do something with the new location...
-                }
+                c++
             }
-            if (fusedLocationClient != null) {
-                fusedLocationClient?.removeLocationUpdates(locationCallback)
-            }
-
-            fusedLocationClient?.requestLocationUpdates(locationRequest,locationCallback,null)
-
         }
     }
-
     //#########################################################
     override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean){
         distance = seekBar.progress.toString()
@@ -172,9 +112,14 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, SeekBar.OnSeekBarC
             .center(circleLatLng)
             .radius(seekBar.progress.toDouble()*1000)
             .strokeColor(Color.BLUE)
+
         )
+
+
+        //Location.distanceBetween(latLng.latitude, latLng.longitude, circle.center.latitude,circle.center.longitude,distance);
         supportActionBar?.subtitle = distance + "km"
         //Log.e("atualizando", "Newest distance: "+distance)
+        //plotPoint()
     }
 
     override fun onStartTrackingTouch(seekBar: SeekBar) {
@@ -191,7 +136,89 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, SeekBar.OnSeekBarC
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
         markerOptions = MarkerOptions()
+        if (checkPermission(Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.ACCESS_FINE_LOCATION)) {
+            fusedLocationClient?.lastLocation?.
+                addOnSuccessListener(this
+                ) { location : Location? ->
+                    // Got last known location. In some rare
+                    // situations this can be null.
+                    //println(RadarDatabase.getAllRadars())
+                    if(location == null) {
+                        val dialog = AlertDialog.Builder(this)
+                            .setTitle("Aviso")
+                            .setMessage("Algo inesperado ocorreu. Verifique se o seu gps esta ativado e tente novamente mais tarde!")
+                            .setPositiveButton("OK", {id, v ->this.finish()})
+                            .create()
+                        dialog.show()
+                    }
+                    if (location != null) {
+                        val posLatitude = location.latitude
+                        val posLongitude = location.longitude
+                        pre = mMap.addMarker(markerOptions
+                            .position(LatLng(posLatitude,posLongitude))
+                            .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)))
+                        circle = mMap.addCircle(CircleOptions()
+                            .center(LatLng(posLatitude,posLongitude))
+                            .radius(seekBar.progress.toDouble()*1000)
+                            .strokeColor(Color.BLUE)
+                        )
+                        //plotPoint()
+                    }
 
+
+                }
+
+
+            val locationCallback = object : LocationCallback() {
+
+                override fun onLocationResult(lr: LocationResult) {
+                    if (lr == null) {
+                        return
+                    }
+
+                    for (location:Location in lr.locations) {
+
+                        if (location != null) {
+
+                            val posLatitude = lr.locations.last().latitude
+                            val posLongitude = lr.locations.last().longitude
+                            val stringLocation = location.toString()
+                            circleLatLng = LatLng(posLatitude,posLongitude)
+                            pre.remove()
+                            circle.remove()
+                            pre = mMap.addMarker(markerOptions
+                                .position(LatLng(posLatitude,posLongitude))
+                                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
+                            )
+                            circle = mMap.addCircle(CircleOptions()
+                                .center(LatLng(posLatitude,posLongitude))
+                                .radius(seekBar.progress.toDouble()*1000)
+                                .strokeColor(Color.BLUE)
+                            )
+                            //plotPoint()
+                            val oldPos = mMap.cameraPosition
+                            val pos = CameraPosition.builder(oldPos)
+                                .target(LatLng(posLatitude,posLongitude))
+                                .zoom(13f)
+                                .build()
+                            mMap.animateCamera(CameraUpdateFactory.newCameraPosition(pos))
+
+                            Log.e("atualizando", "Newest Location: "+String.format(stringLocation))
+
+                            //val a=(LatLng(pos_latitude,pos_longitude))
+                            //Toast.makeText(this@MapsActivity, stringLocation, Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                }
+            }
+            if (fusedLocationClient != null) {
+                fusedLocationClient?.removeLocationUpdates(locationCallback)
+            }
+            //println(RadarDatabase.getRadar(22).type.toString())
+            fusedLocationClient?.requestLocationUpdates(locationRequest,locationCallback,null)
+
+        }
 
     }
 
